@@ -1,13 +1,40 @@
+import { v } from "convex/values";
 import { mutation } from "./_generated/server";
 import { hashPassword } from "./crypto";
 
 export const seedInitialData = mutation({
-  args: {},
-  handler: async (ctx) => {
-    // Check if data already exists
+  args: {
+    force: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const shouldForce = args.force ?? true; // Default to re-seeding cleanly when triggered
+
     const existingUsers = await ctx.db.query("users").first();
-    if (existingUsers) {
+    if (existingUsers && !shouldForce) {
       return { message: "Database already has users. Skipping seed." };
+    }
+
+    if (shouldForce) {
+      // Clean existing data for clean reseed
+      const tables = [
+        "users",
+        "sessions",
+        "actionVerifications",
+        "laptops",
+        "borrowRequests",
+        "requestLaptops",
+        "borrowTransactions",
+        "loanLines",
+        "returnSubmissions",
+        "activityLogs",
+      ] as const;
+
+      for (const table of tables) {
+        const records = await ctx.db.query(table).collect();
+        for (const record of records) {
+          await ctx.db.delete(record._id);
+        }
+      }
     }
 
     const defaultPassword = "Password123!";
@@ -28,9 +55,9 @@ export const seedInitialData = mutation({
     // 2. Create Sample Students from SPICT Cohorts (Grades 7–10)
     const studentsData = [
       {
-        fullName: "Mark Santos",
-        lrn: "109283746501",
-        email: "mark.santos@student.fmnhs.edu.ph",
+        fullName: "Zyrine Amber Titan",
+        lrn: "105580160009",
+        email: "user@example",
         gradeLevel: 7 as const,
         section: "Cybernauts",
       },
@@ -138,13 +165,13 @@ export const seedInitialData = mutation({
       action: "DATABASE_SEEDED",
       entityType: "system",
       entityId: "seed",
-      details: "Initial development seed data created",
+      details: "Initial development seed data created with Zyrine Amber Titan (LRN: 105580160009)",
       timestamp: Date.now(),
     });
 
     return {
       success: true,
-      message: "Database seeded successfully with 1 Teacher, 4 Students, and 5 Laptops",
+      message: "Database seeded successfully with 1 Teacher, 4 Students (including Zyrine Amber Titan), and 5 Laptops",
     };
   },
 });

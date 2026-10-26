@@ -150,10 +150,10 @@ export default function StudentLoginPage() {
           <div className="flex flex-wrap gap-2 justify-center">
             <button
               type="button"
-              onClick={() => fillDemoStudent("109283746501")}
+              onClick={() => fillDemoStudent("105580160009")}
               className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-mono text-blue-400 hover:bg-slate-800 transition-colors"
             >
-              Gr. 7 (Mark)
+              Gr. 7 (Zyrine)
             </button>
             <button
               type="button"
