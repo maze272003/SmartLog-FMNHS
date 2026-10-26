@@ -55,11 +55,85 @@ export default function StudentScanPage() {
     token ? { token } : "skip"
   );
 
+  // Latest laptop list for the scan loop without re-capturing stale state.
+  const allLaptopsRef = useRef<typeof allLaptops>(undefined);
+  useEffect(() => {
+    allLaptopsRef.current = allLaptops;
+  }, [allLaptops]);
+
   const submitBorrowMutation = useMutation(api.requests.submitBorrowRequest);
 
-  // Camera start / stop
+  const addLaptopToCart = (laptop: any) => {
+    if (!laptop.isAvailable && laptop.availability !== "AVAILABLE") {
+      setSubmitError(`Laptop ${laptop.assetCode} is currently ${laptop.availability}`);
+      return;
+    }
+
+    setSelectedLaptops((prev) => {
+      if (prev.some((item) => item.id === laptop.id)) {
+        return prev; // Prevent duplicate selection
+      }
+      return [...prev, laptop];
+    });
+    setSubmitError(null);
+  };
+
+  const handleDetectedCode = (codeData: string) => {
+    const laptops = allLaptopsRef.current;
+    if (!laptops) return;
+
+    // QR could be full URL or token
+    const tokenPart = codeData.includes("/q/") ? codeData.split("/q/")[1] : codeData;
+
+    const matched = laptops.find(
+      (l: any) =>
+        l.qrToken === tokenPart ||
+        l.assetCode.toUpperCase() === tokenPart.toUpperCase() ||
+        codeData.toUpperCase().includes(l.assetCode.toUpperCase())
+    );
+
+    if (matched) {
+      addLaptopToCart(matched);
+      setScanMessage(`Scanned ${matched.assetCode} successfully!`);
+    } else {
+      setScanMessage(`Unrecognized QR code (${codeData}).`);
+    }
+  };
+
+  // Camera start / stop. The scan loop lives inside the effect so ref
+  // mutations (canvas/rAF) never run during render.
   useEffect(() => {
     let stream: MediaStream | null = null;
+
+    const scanLoop = () => {
+      if (
+        videoRef.current &&
+        videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA &&
+        canvasRef.current
+      ) {
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          canvas.height = videoRef.current.videoHeight;
+          canvas.width = videoRef.current.videoWidth;
+          ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: "dontInvert",
+          });
+
+          if (code && code.data) {
+            handleDetectedCode(code.data);
+            // Pause scanning briefly
+            setTimeout(() => {
+              animationFrameRef.current = requestAnimationFrame(scanLoop);
+            }, 1500);
+            return;
+          }
+        }
+      }
+      animationFrameRef.current = requestAnimationFrame(scanLoop);
+    };
 
     if (activeTab === "camera") {
       navigator.mediaDevices
@@ -91,72 +165,6 @@ export default function StudentScanPage() {
       }
     };
   }, [activeTab]);
-
-  const scanLoop = () => {
-    if (
-      videoRef.current &&
-      videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA &&
-      canvasRef.current
-    ) {
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        canvas.height = videoRef.current.videoHeight;
-        canvas.width = videoRef.current.videoWidth;
-        ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(imageData.data, imageData.width, imageData.height, {
-          inversionAttempts: "dontInvert",
-        });
-
-        if (code && code.data) {
-          handleDetectedCode(code.data);
-          // Pause scanning briefly
-          setTimeout(() => {
-            animationFrameRef.current = requestAnimationFrame(scanLoop);
-          }, 1500);
-          return;
-        }
-      }
-    }
-    animationFrameRef.current = requestAnimationFrame(scanLoop);
-  };
-
-  const handleDetectedCode = (codeData: string) => {
-    if (!allLaptops) return;
-
-    // QR could be full URL or token
-    const tokenPart = codeData.includes("/q/") ? codeData.split("/q/")[1] : codeData;
-
-    const matched = allLaptops.find(
-      (l: any) =>
-        l.qrToken === tokenPart ||
-        l.assetCode.toUpperCase() === tokenPart.toUpperCase() ||
-        codeData.toUpperCase().includes(l.assetCode.toUpperCase())
-    );
-
-    if (matched) {
-      addLaptopToCart(matched);
-      setScanMessage(`Scanned ${matched.assetCode} successfully!`);
-    } else {
-      setScanMessage(`Unrecognized QR code (${codeData}).`);
-    }
-  };
-
-  const addLaptopToCart = (laptop: any) => {
-    if (!laptop.isAvailable && laptop.availability !== "AVAILABLE") {
-      setSubmitError(`Laptop ${laptop.assetCode} is currently ${laptop.availability}`);
-      return;
-    }
-
-    setSelectedLaptops((prev) => {
-      if (prev.some((item) => item.id === laptop.id)) {
-        return prev; // Prevent duplicate selection
-      }
-      return [...prev, laptop];
-    });
-    setSubmitError(null);
-  };
 
   const removeLaptop = (id: string) => {
     setSelectedLaptops((prev) => prev.filter((item) => item.id !== id));

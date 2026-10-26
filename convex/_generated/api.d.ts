@@ -11,10 +11,12 @@
 import type * as auth from "../auth.js";
 import type * as crypto from "../crypto.js";
 import type * as dashboard from "../dashboard.js";
+import type * as domain from "../domain.js";
 import type * as laptops from "../laptops.js";
 import type * as logbook from "../logbook.js";
 import type * as requests from "../requests.js";
 import type * as seed from "../seed.js";
+import type * as testHelpers from "../testHelpers.js";
 import type * as transactions from "../transactions.js";
 import type * as users from "../users.js";
 
@@ -28,10 +30,12 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   crypto: typeof crypto;
   dashboard: typeof dashboard;
+  domain: typeof domain;
   laptops: typeof laptops;
   logbook: typeof logbook;
   requests: typeof requests;
   seed: typeof seed;
+  testHelpers: typeof testHelpers;
   transactions: typeof transactions;
   users: typeof users;
 }>;

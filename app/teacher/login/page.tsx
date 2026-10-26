@@ -141,6 +141,14 @@ export default function TeacherLoginPage() {
           </button>
         </form>
 
+        {/* Account recovery */}
+        <p className="mt-4 text-center text-xs text-slate-500">
+          Locked out or have a temporary password?{" "}
+          <Link href="/account/activate" className="text-blue-400 hover:text-blue-300 font-semibold">
+            Set a new password
+          </Link>
+        </p>
+
         {/* Demo Helper */}
         <div className="mt-6 pt-5 border-t border-slate-800/80 text-center">
           <p className="text-xs text-slate-400 mb-2">Need test credentials?</p>

@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireTeacher, getUserFromSession } from "./auth";
+import { isLaptopIssuable } from "./domain";
 
 export const listLaptops = query({
   args: {
@@ -42,7 +43,7 @@ export const listLaptops = query({
         location: l.location,
         condition: l.condition,
         availability: l.availability,
-        isAvailable: l.availability === "AVAILABLE" && l.condition !== "DAMAGED",
+        isAvailable: isLaptopIssuable(l),
       }));
     }
 
@@ -70,7 +71,7 @@ export const getLaptop = query({
     const user = await getUserFromSession(ctx, args.token);
     if (!user) throw new Error("UNAUTHENTICATED");
 
-    const laptop = await ctx.db.get(args.laptopId);
+    const laptop = await ctx.db.get("laptops", args.laptopId);
     if (!laptop) return null;
 
     if (user.role === "STUDENT") {
@@ -81,7 +82,7 @@ export const getLaptop = query({
         location: laptop.location,
         condition: laptop.condition,
         availability: laptop.availability,
-        isAvailable: laptop.availability === "AVAILABLE" && laptop.condition !== "DAMAGED",
+        isAvailable: isLaptopIssuable(laptop),
       };
     }
 
@@ -129,7 +130,7 @@ export const resolveQr = query({
       location: laptop.location,
       condition: laptop.condition,
       availability: laptop.availability,
-      isAvailable: laptop.availability === "AVAILABLE" && laptop.condition !== "DAMAGED",
+      isAvailable: isLaptopIssuable(laptop),
     };
   },
 });
@@ -200,7 +201,7 @@ export const updateLaptop = mutation({
   },
   handler: async (ctx, args) => {
     const teacher = await requireTeacher(ctx, args.token);
-    const laptop = await ctx.db.get(args.laptopId);
+    const laptop = await ctx.db.get("laptops", args.laptopId);
     if (!laptop) throw new Error("NOT_FOUND: Laptop not found");
 
     let availability = laptop.availability;
@@ -212,7 +213,7 @@ export const updateLaptop = mutation({
       }
     }
 
-    await ctx.db.patch(args.laptopId, {
+    await ctx.db.patch("laptops", args.laptopId, {
       model: args.model.trim(),
       serialNumber: args.serialNumber?.trim(),
       location: args.location.trim(),
@@ -243,14 +244,14 @@ export const retireLaptop = mutation({
   },
   handler: async (ctx, args) => {
     const teacher = await requireTeacher(ctx, args.token);
-    const laptop = await ctx.db.get(args.laptopId);
+    const laptop = await ctx.db.get("laptops", args.laptopId);
     if (!laptop) throw new Error("NOT_FOUND: Laptop not found");
 
     if (laptop.availability === "BORROWED") {
       throw new Error("INVALID_STATE: Cannot retire a laptop that is currently borrowed");
     }
 
-    await ctx.db.patch(args.laptopId, {
+    await ctx.db.patch("laptops", args.laptopId, {
       availability: "RETIRED",
       notes: `${laptop.notes ?? ""}\n[Retired: ${args.reason}]`.trim(),
     });
@@ -277,10 +278,10 @@ export const recordLoss = mutation({
   },
   handler: async (ctx, args) => {
     const teacher = await requireTeacher(ctx, args.token);
-    const laptop = await ctx.db.get(args.laptopId);
+    const laptop = await ctx.db.get("laptops", args.laptopId);
     if (!laptop) throw new Error("NOT_FOUND: Laptop not found");
 
-    await ctx.db.patch(args.laptopId, {
+    await ctx.db.patch("laptops", args.laptopId, {
       availability: "LOST",
       notes: `${laptop.notes ?? ""}\n[Reported Lost: ${args.notes}]`.trim(),
     });

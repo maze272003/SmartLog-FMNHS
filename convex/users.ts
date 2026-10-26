@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireTeacher } from "./auth";
 import { hashPassword } from "./crypto";
+import { isValidLrn, deriveLoanCounts } from "./domain";
 
 export const createStudent = mutation({
   args: {
@@ -17,7 +18,7 @@ export const createStudent = mutation({
     const teacher = await requireTeacher(ctx, args.token);
 
     const cleanLrn = args.lrn.trim();
-    if (!/^\d+$/.test(cleanLrn)) {
+    if (!isValidLrn(cleanLrn)) {
       throw new Error("VALIDATION_ERROR: LRN must contain only digits");
     }
 
@@ -85,7 +86,7 @@ export const updateStudent = mutation({
   },
   handler: async (ctx, args) => {
     const teacher = await requireTeacher(ctx, args.token);
-    const student = await ctx.db.get(args.studentId);
+    const student = await ctx.db.get("users", args.studentId);
     if (!student || student.role !== "STUDENT") {
       throw new Error("NOT_FOUND: Student profile not found");
     }
@@ -102,7 +103,7 @@ export const updateStudent = mutation({
       }
     }
 
-    await ctx.db.patch(args.studentId, {
+    await ctx.db.patch("users", args.studentId, {
       fullName: args.fullName.trim(),
       email: cleanEmail,
       gradeLevel: args.gradeLevel,
@@ -117,7 +118,7 @@ export const updateStudent = mutation({
         .withIndex("by_userId", (q) => q.eq("userId", args.studentId))
         .collect();
       for (const s of sessions) {
-        await ctx.db.delete(s._id);
+        await ctx.db.delete("sessions", s._id);
       }
 
       const pendingRequests = await ctx.db
@@ -127,7 +128,7 @@ export const updateStudent = mutation({
         )
         .collect();
       for (const req of pendingRequests) {
-        await ctx.db.patch(req._id, {
+        await ctx.db.patch("borrowRequests", req._id, {
           status: "CANCELLED",
           reviewReason: "Student account was deactivated",
         });
@@ -156,13 +157,13 @@ export const resetStudentPassword = mutation({
   },
   handler: async (ctx, args) => {
     const teacher = await requireTeacher(ctx, args.token);
-    const student = await ctx.db.get(args.studentId);
+    const student = await ctx.db.get("users", args.studentId);
     if (!student || student.role !== "STUDENT") {
       throw new Error("NOT_FOUND: Student profile not found");
     }
 
     const { hash, salt } = await hashPassword(args.newPassword);
-    await ctx.db.patch(args.studentId, {
+    await ctx.db.patch("users", args.studentId, {
       passwordHash: hash,
       passwordSalt: salt,
     });
@@ -173,7 +174,7 @@ export const resetStudentPassword = mutation({
       .withIndex("by_userId", (q) => q.eq("userId", args.studentId))
       .collect();
     for (const s of sessions) {
-      await ctx.db.delete(s._id);
+      await ctx.db.delete("sessions", s._id);
     }
 
     await ctx.db.insert("activityLogs", {
@@ -240,30 +241,70 @@ export const getStudentById = query({
   args: {
     token: v.string(),
     studentId: v.id("users"),
+    clientNow: v.number(), // supplied by the client; queries never read the clock
   },
   handler: async (ctx, args) => {
     await requireTeacher(ctx, args.token);
-    const student = await ctx.db.get(args.studentId);
+    const student = await ctx.db.get("users", args.studentId);
     if (!student || student.role !== "STUDENT") return null;
 
-    // Active loan count
+    const now = args.clientNow;
+
+    // Borrowing history with derived per-transaction quantities
     const transactions = await ctx.db
       .query("borrowTransactions")
       .withIndex("by_studentId", (q) => q.eq("studentId", args.studentId))
+      .order("desc")
       .take(50);
 
-    const activeLines = [];
+    const history = [];
+    let activeLinesTotal = 0;
+    let hasOverdue = false;
+    let nearestDueAt: number | null = null;
+
     for (const t of transactions) {
       const lines = await ctx.db
         .query("loanLines")
         .withIndex("by_transactionId", (q) => q.eq("transactionId", t._id))
         .collect();
-      for (const line of lines) {
-        if (line.status === "ACTIVE") {
-          activeLines.push(line);
-        }
+
+      const activeLines = lines.filter((l) => l.status === "ACTIVE");
+      const { returnedQuantity, outstandingQuantity, displayStatus } =
+        deriveLoanCounts(lines);
+
+      if (activeLines.length > 0) {
+        activeLinesTotal += activeLines.length;
+        if (t.dueAt < now) hasOverdue = true;
+        if (!nearestDueAt || t.dueAt < nearestDueAt) nearestDueAt = t.dueAt;
       }
+
+      history.push({
+        id: t._id,
+        issuedQuantity: t.issuedQuantity,
+        returnedQuantity,
+        outstandingQuantity,
+        displayStatus,
+        issuedAt: t.issuedAt,
+        dueAt: t.dueAt,
+        isOverdue: activeLines.length > 0 && t.dueAt < now,
+        laptops: lines.map((l) => ({
+          id: l._id,
+          assetCode: l.assetCodeSnapshot,
+          model: l.modelSnapshot,
+          status: l.status,
+          returnedAt: l.returnedAt,
+        })),
+      });
     }
+
+    // Pending password reset trigger support: latest open requests count
+    const openRequests = await ctx.db
+      .query("borrowRequests")
+      .withIndex("by_student_and_status", (q) => q.eq("studentId", args.studentId))
+      .filter((q) =>
+        q.or(q.eq(q.field("status"), "PENDING"), q.eq(q.field("status"), "APPROVED"))
+      )
+      .take(20);
 
     return {
       student: {
@@ -276,8 +317,12 @@ export const getStudentById = query({
         status: student.status,
         program: student.program,
       },
-      activeBorrowedCount: activeLines.length,
+      activeBorrowedCount: activeLinesTotal,
+      hasOverdue,
+      nearestDueAt,
+      openRequestsCount: openRequests.length,
       totalTransactionsCount: transactions.length,
+      history,
     };
   },
 });

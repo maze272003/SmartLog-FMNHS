@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/components/AuthContext";
 import { useRouter } from "next/navigation";
 import { useQuery } from "convex/react";
@@ -31,9 +31,11 @@ export default function StudentCalendarPage() {
     token ? { token } : "skip"
   );
 
-  if (isLoading || !user) return null;
+  // One timestamp per mount keeps renders pure while still deriving
+  // today/overdue groupings in Asia/Manila.
+  const [now] = useState(() => Date.now());
 
-  const now = Date.now();
+  if (isLoading || !user) return null;
 
   return (
     <div className="min-h-screen bg-[#090d16] text-white flex flex-col">

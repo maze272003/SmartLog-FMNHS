@@ -18,7 +18,7 @@ export async function getUserFromSession(
     return null;
   }
 
-  const user = await ctx.db.get(session.userId);
+  const user = await ctx.db.get("users", session.userId);
   if (!user || user.status !== "ACTIVE") {
     return null;
   }
@@ -132,7 +132,7 @@ export const logout = mutation({
       .withIndex("by_token", (q) => q.eq("token", args.token))
       .unique();
     if (session) {
-      await ctx.db.delete(session._id);
+      await ctx.db.delete("sessions", session._id);
     }
     return { success: true };
   },
@@ -186,5 +186,128 @@ export const getCurrentUser = query({
       employeeId: user.employeeId,
       department: user.department,
     };
+  },
+});
+
+// Authenticated password change (asd.md §6.1 /account/change-password)
+export const changePassword = mutation({
+  args: {
+    token: v.string(),
+    currentPassword: v.string(),
+    newPassword: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await getUserFromSession(ctx, args.token);
+    if (!user) throw new Error("UNAUTHENTICATED");
+
+    if (args.newPassword.length < 8) {
+      throw new Error("VALIDATION_ERROR: New password must be at least 8 characters");
+    }
+
+    const isValid = await verifyPassword(
+      args.currentPassword,
+      user.passwordHash,
+      user.passwordSalt
+    );
+    if (!isValid) {
+      return { success: false, error: "Current password is incorrect" };
+    }
+
+    const { hash, salt } = await hashPassword(args.newPassword);
+    await ctx.db.patch("users", user._id, { passwordHash: hash, passwordSalt: salt });
+
+    // Invalidate every other session (keep the current one active)
+    const sessions = await ctx.db
+      .query("sessions")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .collect();
+    for (const s of sessions) {
+      if (s.token !== args.token) {
+        await ctx.db.delete("sessions", s._id);
+      }
+    }
+
+    await ctx.db.insert("activityLogs", {
+      actorId: user._id,
+      actorRole: user.role,
+      action: "PASSWORD_CHANGED",
+      entityType: "users",
+      entityId: user._id,
+      details: `${user.fullName} changed their account password`,
+      timestamp: Date.now(),
+    });
+
+    return { success: true };
+  },
+});
+
+// One-time activation / credential-based password setup (asd.md §5.3, §6.1
+// /account/activate). Verifies the current (temporary or initial) credentials
+// without an existing session, then sets the new password.
+export const completeActivation = mutation({
+  args: {
+    identifier: v.string(), // email or LRN
+    currentPassword: v.string(),
+    newPassword: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const rawId = args.identifier.trim();
+    const isEmail = rawId.includes("@");
+
+    let user: Doc<"users"> | null = null;
+    if (isEmail) {
+      user = await ctx.db
+        .query("users")
+        .withIndex("by_email", (q) => q.eq("email", rawId.toLowerCase()))
+        .unique();
+    } else {
+      user = await ctx.db
+        .query("users")
+        .withIndex("by_lrn", (q) => q.eq("lrn", rawId))
+        .unique();
+    }
+
+    if (!user) {
+      return { success: false, error: "Account not found for this email or LRN" };
+    }
+    if (user.status !== "ACTIVE") {
+      return { success: false, error: "Account is inactive. Please contact your teacher." };
+    }
+    if (args.newPassword.length < 8) {
+      return { success: false, error: "New password must be at least 8 characters" };
+    }
+
+    const isValid = await verifyPassword(
+      args.currentPassword,
+      user.passwordHash,
+      user.passwordSalt
+    );
+    if (!isValid) {
+      return { success: false, error: "Temporary password is incorrect" };
+    }
+
+    const { hash, salt } = await hashPassword(args.newPassword);
+    await ctx.db.patch("users", user._id, { passwordHash: hash, passwordSalt: salt });
+
+    // Activation invalidates all existing sessions for safety
+    const sessions = await ctx.db
+      .query("sessions")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .collect();
+    for (const s of sessions) {
+      await ctx.db.delete("sessions", s._id);
+    }
+
+    await ctx.db.insert("activityLogs", {
+      actorId: user._id,
+      actorRole: user.role,
+      action: "ACCOUNT_ACTIVATED",
+      entityType: "users",
+      entityId: user._id,
+      details: `${user.fullName} completed account activation and set a new password`,
+      timestamp: Date.now(),
+    });
+
+    return { success: true, role: user.role };
   },
 });

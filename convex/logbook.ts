@@ -16,12 +16,12 @@ export const exportOperationalLogbook = query({
         .withIndex("by_transactionId", (q) => q.eq("transactionId", tx._id))
         .collect();
 
-      const teacher = await ctx.db.get(tx.issuedByTeacherId);
+      const teacher = await ctx.db.get("users", tx.issuedByTeacherId);
 
       for (const line of lines) {
         let returnTeacherName = "";
         if (line.receivedByTeacherId) {
-          const rt = await ctx.db.get(line.receivedByTeacherId);
+          const rt = await ctx.db.get("users", line.receivedByTeacherId);
           if (rt) returnTeacherName = rt.fullName;
         }
 

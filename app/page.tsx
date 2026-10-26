@@ -29,7 +29,8 @@ export default function HomePage() {
     setIsSeeding(true);
     setSeedStatus(null);
     try {
-      const res = await seedMutation();
+      // force: false seeds only when the database is empty — never wipes data
+      const res = await seedMutation({ force: false });
       setSeedStatus(res.message);
     } catch (err: any) {
       setSeedStatus(`Seed error: ${err.message}`);

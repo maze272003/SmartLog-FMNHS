@@ -42,10 +42,12 @@ Click **"Seed Initial FMNHS Data"** on the landing page (`/`) to populate sample
 | Role | Name | Email / LRN | Password | Cohort |
 | :--- | :--- | :--- | :--- | :--- |
 | **Teacher** | Mr. Juan Dela Cruz | `teacher@fmnhs.edu.ph` | `Password123!` | ICT Lab Custodian |
-| **Student** | Mark Santos | `109283746501` | `Password123!` | Grade 7 - Cybernauts |
+| **Student** | Zyrine Amber Titan | `105580160009` | `Password123!` | Grade 7 - Cybernauts |
 | **Student** | Maria Ramos | `109283746502` | `Password123!` | Grade 8 - Python |
 | **Student** | Carl Mendoza | `109283746503` | `Password123!` | Grade 9 - Azure |
 | **Student** | Bea Dela Torre | `109283746504` | `Password123!` | Grade 10 - AI |
+
+Students may also sign in with their email alias (`user@example.com` maps to Zyrine Amber Titan).
 
 ---
 
@@ -66,7 +68,41 @@ Click **"Seed Initial FMNHS Data"** on the landing page (`/`) to populate sample
    npm run typecheck
    ```
 
-4. **Run Research Evaluation Analysis**:
+4. **Run Lint**:
+   ```bash
+   npm run lint
+   ```
+
+5. **Run Unit Tests** (Convex server functions + domain logic + React components):
+   ```bash
+   npm test
+   ```
+
+6. **Run Research Evaluation Analysis**:
    ```bash
    npx tsx scripts/evaluate.ts
    ```
+
+---
+
+## 🧪 Testing
+
+The test suite uses **Vitest** with two projects:
+
+| Project | Environment | Scope |
+| :--- | :--- | :--- |
+| `convex` | `@edge-runtime/vm` + `convex-test` | Real Convex mutations/queries run in-memory — auth, sessions, inventory, requests, atomic release/return, dashboards, exports |
+| `app` | `jsdom` + Testing Library | Pure domain logic (`convex/domain.ts`), evaluation math, and React components (Navbar, AuthContext, ActionConfirmModal) |
+
+Tests cover the asd.md §17 acceptance scenarios: `AUTH-*`, `SCOPE-*`, `INV-01`, `QR-01/02`,
+`REQ-*`, `ISSUE-*`, `RET-*`, `TIME-01`, `CAL-01`, `LOG-01`, `PRIV-01`, and `EVAL-01`.
+
+```bash
+npm test          # run once
+npm run test:watch  # watch mode
+```
+
+Shared business rules (loan-state derivation, Manila calendar math, issuance rules,
+LRN validation, weighted-mean formulas, CSV escaping) live in
+[`convex/domain.ts`](convex/domain.ts) and are imported by Convex functions, the
+frontend, the evaluation script, and the tests.

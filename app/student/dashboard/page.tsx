@@ -21,10 +21,10 @@ import {
 export default function StudentDashboard() {
   const { user, token, isStudent, isLoading } = useAuth();
   const router = useRouter();
-  const [mounted, setMounted] = useState(false);
+  // Frozen per-mount timestamp keeps the render pure (no wall clock reads).
+  const [clientNowTs] = useState(() => Date.now());
 
   useEffect(() => {
-    setMounted(true);
     if (!isLoading && (!user || !isStudent)) {
       router.push("/student/login");
     }
@@ -32,7 +32,7 @@ export default function StudentDashboard() {
 
   const stats = useQuery(
     api.dashboard.getStudentStats,
-    token ? { token, clientNow: Date.now() } : "skip"
+    token ? { token, clientNow: clientNowTs } : "skip"
   );
 
   const activeLoans = useQuery(
@@ -45,7 +45,7 @@ export default function StudentDashboard() {
     token ? { token } : "skip"
   );
 
-  if (isLoading || !mounted || !user) {
+  if (isLoading || !user) {
     return (
       <div className="min-h-screen bg-[#090d16] flex items-center justify-center text-slate-400">
         Loading student dashboard...

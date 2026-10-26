@@ -23,10 +23,10 @@ import {
 export default function TeacherDashboard() {
   const { user, token, isTeacher, isLoading } = useAuth();
   const router = useRouter();
-  const [mounted, setMounted] = useState(false);
+  // Frozen per-mount timestamp keeps the render pure (no wall clock reads).
+  const [clientNowTs] = useState(() => Date.now());
 
   useEffect(() => {
-    setMounted(true);
     if (!isLoading && (!user || !isTeacher)) {
       router.push("/teacher/login");
     }
@@ -34,7 +34,7 @@ export default function TeacherDashboard() {
 
   const stats = useQuery(
     api.dashboard.getTeacherStats,
-    token ? { token, clientNow: Date.now() } : "skip"
+    token ? { token, clientNow: clientNowTs } : "skip"
   );
 
   const pendingRequests = useQuery(
@@ -47,7 +47,7 @@ export default function TeacherDashboard() {
     token ? { token, filterStatus: "ACTIVE" } : "skip"
   );
 
-  if (isLoading || !mounted || !user) {
+  if (isLoading || !user) {
     return (
       <div className="min-h-screen bg-[#090d16] flex items-center justify-center text-slate-400">
         Loading teacher dashboard...

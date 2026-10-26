@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireStudent, requireTeacher, getUserFromSession } from "./auth";
+import { isLaptopIssuable } from "./domain";
 
 export const submitBorrowRequest = mutation({
   args: {
@@ -37,11 +38,11 @@ export const submitBorrowRequest = mutation({
 
     // Validate laptop availability & usability
     for (const lid of uniqueIds) {
-      const laptop = await ctx.db.get(lid);
+      const laptop = await ctx.db.get("laptops", lid);
       if (!laptop) {
         throw new Error(`NOT_FOUND: Laptop ${lid} not found`);
       }
-      if (laptop.availability !== "AVAILABLE" || laptop.condition === "DAMAGED") {
+      if (!isLaptopIssuable(laptop)) {
         throw new Error(
           `LAPTOP_UNAVAILABLE: Laptop ${laptop.assetCode} is currently not available for borrowing`
         );
@@ -62,7 +63,7 @@ export const submitBorrowRequest = mutation({
     for (const req of openRequests) {
       const reqLaptops = await ctx.db
         .query("requestLaptops")
-        .withIndex("by_requestId", (q) => q.eq("requestId", req._id))
+        .withIndex("by_request_and_laptop", (q) => q.eq("requestId", req._id))
         .collect();
       const existingLidSet = new Set(reqLaptops.map((rl) => rl.laptopId));
       for (const lid of uniqueIds) {
@@ -110,7 +111,7 @@ export const approveRequest = mutation({
   },
   handler: async (ctx, args) => {
     const teacher = await requireTeacher(ctx, args.token);
-    const req = await ctx.db.get(args.requestId);
+    const req = await ctx.db.get("borrowRequests", args.requestId);
     if (!req) throw new Error("NOT_FOUND: Request not found");
 
     if (req.status !== "PENDING") {
@@ -121,7 +122,7 @@ export const approveRequest = mutation({
       throw new Error("VALIDATION_ERROR: Due date must be in the future");
     }
 
-    await ctx.db.patch(args.requestId, {
+    await ctx.db.patch("borrowRequests", args.requestId, {
       status: "APPROVED",
       approvedDueAt: args.approvedDueAt,
       reviewedByTeacherId: teacher._id,
@@ -150,14 +151,14 @@ export const rejectRequest = mutation({
   },
   handler: async (ctx, args) => {
     const teacher = await requireTeacher(ctx, args.token);
-    const req = await ctx.db.get(args.requestId);
+    const req = await ctx.db.get("borrowRequests", args.requestId);
     if (!req) throw new Error("NOT_FOUND: Request not found");
 
     if (req.status !== "PENDING" && req.status !== "APPROVED") {
       throw new Error(`STATE_CONFLICT: Cannot reject request in ${req.status} state`);
     }
 
-    await ctx.db.patch(args.requestId, {
+    await ctx.db.patch("borrowRequests", args.requestId, {
       status: "REJECTED",
       reviewReason: args.reason.trim(),
       reviewedByTeacherId: teacher._id,
@@ -187,7 +188,7 @@ export const cancelRequest = mutation({
     const user = await getUserFromSession(ctx, args.token);
     if (!user) throw new Error("UNAUTHENTICATED");
 
-    const req = await ctx.db.get(args.requestId);
+    const req = await ctx.db.get("borrowRequests", args.requestId);
     if (!req) throw new Error("NOT_FOUND: Request not found");
 
     if (user.role === "STUDENT" && req.studentId !== user._id) {
@@ -198,7 +199,7 @@ export const cancelRequest = mutation({
       throw new Error(`STATE_CONFLICT: Cannot cancel request in ${req.status} state`);
     }
 
-    await ctx.db.patch(args.requestId, {
+    await ctx.db.patch("borrowRequests", args.requestId, {
       status: "CANCELLED",
       reviewReason: user.role === "STUDENT" ? "Cancelled by student" : "Cancelled by teacher",
     });
@@ -232,12 +233,12 @@ export const listMyRequests = query({
     for (const req of requests) {
       const lineLaptops = await ctx.db
         .query("requestLaptops")
-        .withIndex("by_requestId", (q) => q.eq("requestId", req._id))
+        .withIndex("by_request_and_laptop", (q) => q.eq("requestId", req._id))
         .collect();
 
       const laptops = [];
       for (const rl of lineLaptops) {
-        const l = await ctx.db.get(rl.laptopId);
+        const l = await ctx.db.get("laptops", rl.laptopId);
         if (l) {
           laptops.push({
             id: l._id,
@@ -286,15 +287,15 @@ export const listPendingRequests = query({
 
     const result = [];
     for (const req of allRequests) {
-      const student = await ctx.db.get(req.studentId);
+      const student = await ctx.db.get("users", req.studentId);
       const lineLaptops = await ctx.db
         .query("requestLaptops")
-        .withIndex("by_requestId", (q) => q.eq("requestId", req._id))
+        .withIndex("by_request_and_laptop", (q) => q.eq("requestId", req._id))
         .collect();
 
       const laptops = [];
       for (const rl of lineLaptops) {
-        const l = await ctx.db.get(rl.laptopId);
+        const l = await ctx.db.get("laptops", rl.laptopId);
         if (l) {
           laptops.push({
             id: l._id,
@@ -331,3 +332,4 @@ export const listPendingRequests = query({
     return result;
   },
 });
+

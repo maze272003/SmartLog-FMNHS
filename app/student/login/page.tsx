@@ -144,6 +144,18 @@ export default function StudentLoginPage() {
           </button>
         </form>
 
+        {/* Account recovery */}
+        <p className="mt-4 text-center text-xs text-slate-500">
+          First time here or forgot your password?{" "}
+          <Link href="/account/activate" className="text-blue-400 hover:text-blue-300 font-semibold">
+            Activate account
+          </Link>{" "}
+          or{" "}
+          <Link href="/account/reset-password" className="text-blue-400 hover:text-blue-300 font-semibold">
+            recover access
+          </Link>
+        </p>
+
         {/* Demo Helper */}
         <div className="mt-6 pt-5 border-t border-slate-800/80 text-center">
           <p className="text-xs text-slate-400 mb-2">Try a sample SPICT student:</p>

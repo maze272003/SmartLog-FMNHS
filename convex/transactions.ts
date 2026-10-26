@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireTeacher, requireStudent, getUserFromSession } from "./auth";
 import { Doc, Id } from "./_generated/dataModel";
+import { deriveLoanCounts, isLaptopIssuable, availabilityAfterReturn, isOverdue } from "./domain";
 
 export const releaseTransaction = mutation({
   args: {
@@ -11,14 +12,14 @@ export const releaseTransaction = mutation({
   handler: async (ctx, args) => {
     const teacher = await requireTeacher(ctx, args.token);
 
-    const req = await ctx.db.get(args.requestId);
+    const req = await ctx.db.get("borrowRequests", args.requestId);
     if (!req) throw new Error("NOT_FOUND: Borrow request not found");
 
     if (req.status !== "APPROVED") {
       throw new Error(`STATE_CONFLICT: Request must be in APPROVED state to release, currently: ${req.status}`);
     }
 
-    const student = await ctx.db.get(req.studentId);
+    const student = await ctx.db.get("users", req.studentId);
     if (!student || student.status !== "ACTIVE") {
       throw new Error("INELIGIBLE_STUDENT: Student account is not active");
     }
@@ -30,7 +31,7 @@ export const releaseTransaction = mutation({
     // Get all requested laptops
     const reqLaptops = await ctx.db
       .query("requestLaptops")
-      .withIndex("by_requestId", (q) => q.eq("requestId", req._id))
+      .withIndex("by_request_and_laptop", (q) => q.eq("requestId", req._id))
       .collect();
 
     if (reqLaptops.length === 0) {
@@ -39,11 +40,11 @@ export const releaseTransaction = mutation({
 
     const laptops: Doc<"laptops">[] = [];
     for (const rl of reqLaptops) {
-      const laptop = await ctx.db.get(rl.laptopId);
+      const laptop = await ctx.db.get("laptops", rl.laptopId);
       if (!laptop) {
         throw new Error(`NOT_FOUND: Laptop ${rl.laptopId} not found`);
       }
-      if (laptop.availability !== "AVAILABLE" || laptop.condition === "DAMAGED") {
+      if (!isLaptopIssuable(laptop)) {
         throw new Error(
           `LAPTOP_UNAVAILABLE: Laptop ${laptop.assetCode} is not available (status: ${laptop.availability}, condition: ${laptop.condition})`
         );
@@ -77,18 +78,17 @@ export const releaseTransaction = mutation({
         conditionOut: laptop.condition,
       });
 
-      await ctx.db.patch(laptop._id, {
+      await ctx.db.patch("laptops", laptop._id, {
         availability: "BORROWED",
       });
     }
 
     // 3. Mark request as FULFILLED
-    await ctx.db.patch(req._id, {
+    await ctx.db.patch("borrowRequests", req._id, {
       status: "FULFILLED",
     });
 
     // 4. Cancel competing open requests that include any of these issued laptops
-    const laptopIdSet = new Set(laptops.map((l) => l._id));
     for (const laptop of laptops) {
       const conflictingReqLaptops = await ctx.db
         .query("requestLaptops")
@@ -97,9 +97,9 @@ export const releaseTransaction = mutation({
 
       for (const crl of conflictingReqLaptops) {
         if (crl.requestId === req._id) continue;
-        const otherReq = await ctx.db.get(crl.requestId);
+        const otherReq = await ctx.db.get("borrowRequests", crl.requestId);
         if (otherReq && (otherReq.status === "PENDING" || otherReq.status === "APPROVED")) {
-          await ctx.db.patch(otherReq._id, {
+          await ctx.db.patch("borrowRequests", otherReq._id, {
             status: "CANCELLED",
             reviewReason: `Laptop ${laptop.assetCode} was issued in another transaction`,
           });
@@ -153,12 +153,12 @@ export const submitReturn = mutation({
 
     let submittedCount = 0;
     for (const lineId of args.loanLineIds) {
-      const line = await ctx.db.get(lineId);
+      const line = await ctx.db.get("loanLines", lineId);
       if (!line || line.status !== "ACTIVE") {
         throw new Error(`STATE_CONFLICT: Loan line ${lineId} is not active`);
       }
 
-      const tx = await ctx.db.get(line.transactionId);
+      const tx = await ctx.db.get("borrowTransactions", line.transactionId);
       if (!tx || tx.studentId !== student._id) {
         throw new Error("UNAUTHORIZED: You can only return your own borrowed laptops");
       }
@@ -217,13 +217,13 @@ export const confirmReturn = mutation({
     let returnedCount = 0;
 
     for (const item of args.lineReturns) {
-      const line = await ctx.db.get(item.loanLineId);
+      const line = await ctx.db.get("loanLines", item.loanLineId);
       if (!line || line.status !== "ACTIVE") {
         continue; // Skip already returned or invalid
       }
 
       // 1. Mark line as RETURNED
-      await ctx.db.patch(line._id, {
+      await ctx.db.patch("loanLines", line._id, {
         status: "RETURNED",
         returnedAt: returnTimestamp,
         receivedByTeacherId: teacher._id,
@@ -232,11 +232,11 @@ export const confirmReturn = mutation({
       });
 
       // 2. Update laptop condition & availability
-      const laptop = await ctx.db.get(line.laptopId);
+      const laptop = await ctx.db.get("laptops", line.laptopId);
       if (laptop) {
-        await ctx.db.patch(laptop._id, {
+        await ctx.db.patch("laptops", laptop._id, {
           condition: item.conditionIn,
-          availability: item.conditionIn === "DAMAGED" ? "UNAVAILABLE" : "AVAILABLE",
+          availability: availabilityAfterReturn(item.conditionIn),
           notes: item.returnNotes
             ? `${laptop.notes ?? ""}\n[Return note: ${item.returnNotes}]`.trim()
             : laptop.notes,
@@ -251,7 +251,7 @@ export const confirmReturn = mutation({
         .collect();
 
       for (const sub of pendingSubmissions) {
-        await ctx.db.patch(sub._id, {
+        await ctx.db.patch("returnSubmissions", sub._id, {
           status: "CONFIRMED",
           reviewedByTeacherId: teacher._id,
           reviewedAt: returnTimestamp,
@@ -295,19 +295,14 @@ export const listMyBorrowed = query({
 
       const activeLines = lines.filter((l) => l.status === "ACTIVE");
       const returnedLines = lines.filter((l) => l.status === "RETURNED");
-
-      let displayStatus: "OPEN" | "PARTIALLY_RETURNED" | "CLOSED" = "OPEN";
-      if (activeLines.length === 0) {
-        displayStatus = "CLOSED";
-      } else if (returnedLines.length > 0) {
-        displayStatus = "PARTIALLY_RETURNED";
-      }
+      const { returnedQuantity, outstandingQuantity, displayStatus } =
+        deriveLoanCounts(lines);
 
       result.push({
         transactionId: tx._id,
         issuedQuantity: tx.issuedQuantity,
-        returnedQuantity: returnedLines.length,
-        outstandingQuantity: activeLines.length,
+        returnedQuantity,
+        outstandingQuantity,
         issuedAt: tx.issuedAt,
         dueAt: tx.dueAt,
         displayStatus,
@@ -392,13 +387,7 @@ export const listTeacherTransactions = query({
 
       const activeLines = lines.filter((l) => l.status === "ACTIVE");
       const returnedLines = lines.filter((l) => l.status === "RETURNED");
-
-      let displayStatus: "OPEN" | "PARTIALLY_RETURNED" | "CLOSED" = "OPEN";
-      if (activeLines.length === 0) {
-        displayStatus = "CLOSED";
-      } else if (returnedLines.length > 0) {
-        displayStatus = "PARTIALLY_RETURNED";
-      }
+      const { displayStatus } = deriveLoanCounts(lines);
 
       if (args.filterStatus === "ACTIVE" && displayStatus === "CLOSED") {
         continue;
@@ -449,3 +438,94 @@ export const listTeacherTransactions = query({
     return result;
   },
 });
+
+// Full transaction line details, snapshots, and timestamps (asd.md §12.4).
+// Teachers may inspect any transaction; students only their own.
+export const getTransactionDetails = query({
+  args: {
+    token: v.string(),
+    transactionId: v.id("borrowTransactions"),
+    clientNow: v.number(), // supplied by the client; queries never read the clock
+  },
+  handler: async (ctx, args) => {
+    const user = await getUserFromSession(ctx, args.token);
+    if (!user) throw new Error("UNAUTHENTICATED");
+
+    const tx = await ctx.db.get("borrowTransactions", args.transactionId);
+    if (!tx) return null;
+
+    if (user.role === "STUDENT" && tx.studentId !== user._id) {
+      throw new Error("UNAUTHORIZED: You can only view your own transactions");
+    }
+
+    const lines = await ctx.db
+      .query("loanLines")
+      .withIndex("by_transactionId", (q) => q.eq("transactionId", tx._id))
+      .collect();
+
+    const activeLines = lines.filter((l) => l.status === "ACTIVE");
+    const { returnedQuantity, outstandingQuantity, displayStatus } =
+      deriveLoanCounts(lines);
+
+    const now = args.clientNow ?? tx.issuedAt;
+
+    // Per-line pending return submissions (student submissions awaiting receipt)
+    const linesWithSubmissions = [];
+    for (const line of lines) {
+      const pendingSubmission = await ctx.db
+        .query("returnSubmissions")
+        .withIndex("by_loanLineId", (q) => q.eq("loanLineId", line._id))
+        .filter((q) => q.eq(q.field("status"), "PENDING"))
+        .first();
+
+      linesWithSubmissions.push({
+        id: line._id,
+        laptopId: line.laptopId,
+        assetCode: line.assetCodeSnapshot,
+        model: line.modelSnapshot,
+        status: line.status,
+        conditionOut: line.conditionOut,
+        conditionIn: line.conditionIn,
+        issuedNotes: line.issueNotes,
+        returnNotes: line.returnNotes,
+        returnedAt: line.returnedAt,
+        receivedByTeacherId: line.receivedByTeacherId,
+        hasPendingReturnSubmission: !!pendingSubmission,
+      });
+    }
+
+    const issuedBy = await ctx.db.get("users", tx.issuedByTeacherId);
+    let receivedBy: { id: Id<"users">; fullName: string } | null = null;
+    const receivedIds = Array.from(
+      new Set(
+        lines
+          .map((l) => l.receivedByTeacherId)
+          .filter((id): id is Id<"users"> => id !== undefined)
+      )
+    );
+    if (receivedIds.length === 1) {
+      const rt = await ctx.db.get("users", receivedIds[0]);
+      if (rt) receivedBy = { id: rt._id, fullName: rt.fullName };
+    }
+
+    return {
+      id: tx._id,
+      requestId: tx.requestId,
+      studentId: tx.studentId,
+      borrowerName: tx.borrowerNameSnapshot,
+      lrn: tx.lrnSnapshot,
+      gradeSection: tx.gradeSectionSnapshot,
+      issuedQuantity: tx.issuedQuantity,
+      issuedAt: tx.issuedAt,
+      dueAt: tx.dueAt,
+      issuedByTeacherName: issuedBy?.fullName ?? "",
+      receivedByTeacherName: receivedBy?.fullName ?? null,
+      returnedQuantity,
+      outstandingQuantity,
+      displayStatus,
+      isOverdue: activeLines.length > 0 && isOverdue(tx.dueAt, now),
+      lines: linesWithSubmissions,
+    };
+  },
+});
+

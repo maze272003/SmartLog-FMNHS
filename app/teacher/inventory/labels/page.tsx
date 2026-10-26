@@ -31,7 +31,7 @@ export default function PrintableLabelsPage() {
 
   const laptops = useQuery(
     api.laptops.listLaptops,
-    token ? { token } : "skip"
+    token && isTeacher ? { token } : "skip"
   );
 
   useEffect(() => {
@@ -146,3 +146,4 @@ export default function PrintableLabelsPage() {
     </div>
   );
 }
+

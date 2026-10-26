@@ -79,8 +79,11 @@ export default defineSchema({
     reviewReason: v.optional(v.string()),
     submittedAt: v.number(),
   })
-    .index("by_studentId", ["studentId"])
     .index("by_status", ["status"])
+    // Kept alongside by_student_and_status: listings need the _creationTime
+    // sort order this index provides for a student's full history.
+    // eslint-disable-next-line @convex-dev/no-duplicate-indexes
+    .index("by_studentId", ["studentId"])
     .index("by_student_and_status", ["studentId", "status"]),
 
   // Request to Laptop Line Items
@@ -88,7 +91,6 @@ export default defineSchema({
     requestId: v.id("borrowRequests"),
     laptopId: v.id("laptops"),
   })
-    .index("by_requestId", ["requestId"])
     .index("by_laptopId", ["laptopId"])
     .index("by_request_and_laptop", ["requestId", "laptopId"]),
 

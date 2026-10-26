@@ -31,6 +31,7 @@ export default function Navbar() {
     { href: "/teacher/requests", label: "Requests", icon: CheckCircle2 },
     { href: "/teacher/transactions", label: "Custody", icon: ShieldCheck },
     { href: "/teacher/logbook", label: "Logbook & Export", icon: FileText },
+    { href: "/teacher/profile", label: "Profile", icon: GraduationCap },
   ];
 
   const studentLinks = [
@@ -39,6 +40,8 @@ export default function Navbar() {
     { href: "/student/requests", label: "My Requests", icon: CheckCircle2 },
     { href: "/student/borrowed", label: "Borrowed Laptops", icon: Laptop },
     { href: "/student/calendar", label: "Calendar", icon: Calendar },
+    { href: "/student/history", label: "History", icon: FileText },
+    { href: "/student/profile", label: "Profile", icon: GraduationCap },
   ];
 
   const links = isTeacher ? teacherLinks : studentLinks;

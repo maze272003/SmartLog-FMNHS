@@ -32,7 +32,10 @@ export const seedInitialData = mutation({
       for (const table of tables) {
         const records = await ctx.db.query(table).collect();
         for (const record of records) {
-          await ctx.db.delete(record._id);
+          // Union-typed table loop: the id cast keeps the explicit-table API
+          // satisfied while deleting across every operational table.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await ctx.db.delete(table, record._id as any);
         }
       }
     }

@@ -79,7 +79,7 @@ export default function StudentRequestsPage() {
             <Clock className="w-12 h-12 mx-auto mb-3 text-slate-600" />
             <h3 className="text-base font-bold text-slate-300">No Requests Submitted</h3>
             <p className="text-xs text-slate-500 mt-1 mb-4">
-              You haven't requested any laptops yet.
+              You haven&apos;t requested any laptops yet.
             </p>
             <Link
               href="/student/scan"
