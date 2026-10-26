@@ -57,7 +57,7 @@ export const seedInitialData = mutation({
       {
         fullName: "Zyrine Amber Titan",
         lrn: "105580160009",
-        email: "user@example",
+        email: "user@example.com",
         gradeLevel: 7 as const,
         section: "Cybernauts",
       },
