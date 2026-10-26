@@ -1,0 +1,11 @@
+item_code,group,dimension,statement,scale_direction
+EFF-01,System Effectiveness,Performance,LogTap quickly decodes laptop QR codes and displays real-time status without delays.,POSITIVE
+EFF-02,System Effectiveness,Accuracy,The automated timestamping and borrower logging eliminate errors found in manual logbooks.,POSITIVE
+EFF-03,System Effectiveness,Data Protection,Student LRN credentials and borrowing records are securely handled and protected.,POSITIVE
+BEN-01,School Benefits,Ease of Use,The scanning interface is intuitive for both students and laboratory teachers.,POSITIVE
+BEN-02,School Benefits,Inventory Tracking,The system accurately maintains the count of available, borrowed, and damaged laptops.,POSITIVE
+BEN-03,School Benefits,Accountability,Requiring student password confirmation and teacher custody receipts improves student care for laptops.,POSITIVE
+SAT-01,Respondent Satisfaction,Time Management,Borrowing and returning laptops through LogTap saves significant laboratory class time.,POSITIVE
+SAT-02,Respondent Satisfaction,Monitoring Ability,Teachers can immediately view overdue laptops and know which student holds each unit.,POSITIVE
+ACC-01,Acceptability,Functionality,The overall features of LogTap meet the requirements of FMNHS computer laboratory operations.,POSITIVE
+ACC-02,Acceptability,Usability,The system is responsive and accessible on both desktop monitors and smartphones.,POSITIVE

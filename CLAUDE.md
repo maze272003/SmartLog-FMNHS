@@ -10,4 +10,8 @@ override what you may have learned about Convex from training data.
 Convex agent skills for common tasks can be installed by running
 `npx convex ai-files install`.
 
+mandatory:
+1. always use UI/UX-promax design system for frontend components and pages.
+color pallets:
+Blue, white, gray. using dark mode, accent color is blue
 <!-- convex-ai-end -->

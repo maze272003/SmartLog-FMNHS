@@ -1,0 +1,7 @@
+observation_code,method,task_type,laptop_quantity,elapsed_seconds,is_complete,error_count,notes
+OBS-001,MANUAL,Borrow Single Laptop,1,142,true,1,Handwriting illegible on LRN
+OBS-002,LOGTAP,Borrow Single Laptop,1,24,true,0,Instant QR camera scan
+OBS-003,MANUAL,Borrow Multi-Unit Bundle,3,315,true,2,Missing asset serial number copied
+OBS-004,LOGTAP,Borrow Multi-Unit Bundle,3,48,true,0,Scanned 3 QR labels in cart
+OBS-005,MANUAL,Partial Return,1,185,true,1,Teacher had to recalculate remaining count manually
+OBS-006,LOGTAP,Partial Return,1,32,true,0,Derived quantities updated automatically

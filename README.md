@@ -1,40 +1,72 @@
-# Welcome to your Convex + Next.js app
+# LogTap — FMNHS Automated Laptop Monitoring System
 
-This is a [Convex](https://convex.dev/) project created with [`npm create convex`](https://www.npmjs.com/package/create-convex).
+LogTap is an automated laptop monitoring and custody system designed for **Fort Magsaysay National High School (FMNHS)** serving the **Special Program in ICT (SPICT)** computer laboratory.
 
-After the initial setup (<2 minutes) you'll have a working full-stack app using:
+Built with **Next.js 16 (App Router, React 19, TypeScript, TailwindCSS v4)** and **Convex (`^1.44.0`)** reactive backend, following the mandatory **UI/UX-promax** design system.
 
-- Convex as your backend (database, server logic)
-- [React](https://react.dev/) as your frontend (web page interactivity)
-- [Next.js](https://nextjs.org/) for optimized web hosting and page routing
-- [Tailwind](https://tailwindcss.com/) for building great looking accessible UI
+---
 
-## Get started
+## 🚀 Key Features
 
-If you just cloned this codebase and didn't use `npm create convex`, run:
+1. **Two-Role Authentication & Access Control**:
+   - **Teacher Portal**: Inventory management, student account enrollment, request reviews, custody release, return reception, and logbook exports.
+   - **Student Portal**: LRN (Learner Reference Number) login with leading-zero preservation, camera QR scanning, multi-laptop selection, personal loan due calendar.
+2. **Distinct Multi-Laptop Quantity Tracking**:
+   - Explicit recording of requested, borrowed, returned, and outstanding laptop quantities.
+   - Full support for partial returns.
+3. **QR Detection & Printable Sticker Sheets**:
+   - In-browser camera scanning (`jsQR` / HTML5 canvas) with manual asset-code fallback.
+   - Printable QR label sheets (`/teacher/inventory/labels`) formatted for sticker paper.
+4. **ACID Transactional Consistency**:
+   - Physical issue and return operations run as atomic Convex mutations with zero risk of partial state or double-borrowing.
+5. **Research Evaluation Methodology (Chapter II)**:
+   - 4-point Likert scale analysis utility (`scripts/evaluate.ts`) calculating frequencies, percentages, weighted means, and verbal interpretations.
+   - Separation of identifiable operational logs from de-identified research metric exports.
 
-```
-npm install
-npm run dev
-```
+---
 
-If you're reading this README on GitHub and want to use this template, run:
+## 🛠️ Technology Stack
 
-```
-npm create convex@latest -- -t nextjs
-```
+- **Frontend**: Next.js 16 (App Router), React 19, TypeScript
+- **Styling**: TailwindCSS v4, UI/UX-promax design system (dark mode, palette: Blue, white, gray, accent: blue)
+- **Backend & Database**: Convex (`^1.44.0`) — reactive queries, transactional mutations, indexed schema
+- **QR Scanning**: `jsQR` client-side canvas barcode detection
+- **QR Generation**: `qrcode` SVG/Canvas generator
 
-## Learn more
+---
 
-To learn more about developing your project with Convex, check out:
+## 👥 Demo Accounts (Seed Data)
 
-- The [Tour of Convex](https://docs.convex.dev/get-started) for a thorough introduction to Convex principles.
-- The rest of [Convex docs](https://docs.convex.dev/) to learn about all Convex features.
-- [Stack](https://stack.convex.dev/) for in-depth articles on advanced topics.
+Click **"Seed Initial FMNHS Data"** on the landing page (`/`) to populate sample records:
 
-## Join the community
+| Role | Name | Email / LRN | Password | Cohort |
+| :--- | :--- | :--- | :--- | :--- |
+| **Teacher** | Mr. Juan Dela Cruz | `teacher@fmnhs.edu.ph` | `Password123!` | ICT Lab Custodian |
+| **Student** | Mark Santos | `109283746501` | `Password123!` | Grade 7 - Cybernauts |
+| **Student** | Maria Ramos | `109283746502` | `Password123!` | Grade 8 - Python |
+| **Student** | Carl Mendoza | `109283746503` | `Password123!` | Grade 9 - Azure |
+| **Student** | Bea Dela Torre | `109283746504` | `Password123!` | Grade 10 - AI |
 
-Join thousands of developers building full-stack apps with Convex:
+---
 
-- Join the [Convex Discord community](https://convex.dev/community) to get help in real-time.
-- Follow [Convex on GitHub](https://github.com/convex/), star and contribute to the open-source implementation of Convex.
+## 💻 Running Locally
+
+1. **Install dependencies**:
+   ```bash
+   npm install
+   ```
+
+2. **Run both Convex and Next.js**:
+   ```bash
+   npm run dev
+   ```
+
+3. **Run Typecheck**:
+   ```bash
+   npm run typecheck
+   ```
+
+4. **Run Research Evaluation Analysis**:
+   ```bash
+   npx tsx scripts/evaluate.ts
+   ```
